@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>位置情報写真AR</title>
+    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar-nfts.js"></script>
+    <script src="https://unpkg.com/aframe-look-at-component@0.8.0/dist/aframe-look-at-component.min.js"></script>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body style="margin:0; overflow:hidden;">
+
+    <div id="start-screen">
+        <h1>位置情報写真AR</h1>
+        <p>タップしてスタート</p>
+        <small>※GPSとカメラの許可が必要です</small>
+    </div>
+
+    <div class="ui-container" id="main-ui">
+        <input type="file" id="fileInput" accept="image/*" style="display:none">
+        <label for="fileInput" id="fileLabel">① 写真を選ぶ</label>
+        <button id="shotBtn" type="button">📸 保存</button>
+        <button id="clearBtn" type="button" class="btn-danger">消去</button>
+    </div>
+
+    <a-scene
+        embedded
+        arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;"
+        renderer="preserveDrawingBuffer: true; alpha: true; antialias: true;"
+        vr-mode-ui="enabled: false">
+        
+        <a-camera id="myCamera" gps-camera rotation-reader></a-camera>
+    </a-scene>
+
+    <script src="js/photoar.js"></script>
+</body>
+</html>
