@@ -1,3 +1,34 @@
+// --- A-Frame カスタムコンポーネント: 近接時のサイズ制御 ---
+// ※ window.onload の外で定義する必要があります
+AFRAME.registerComponent('proximity-listener', {
+    schema: {
+        shrinkRadius: { type: 'number', default: 3 }
+    },
+    init: function () {
+        this.cameraEl = document.querySelector('#myCamera');
+        this.isShrunk = false; 
+    },
+    tick: function () {
+        // カメラと物体の世界座標を取得
+        const camPos = new THREE.Vector3();
+        const elPos = new THREE.Vector3();
+        this.cameraEl.object3D.getWorldPosition(camPos);
+        this.el.object3D.getWorldPosition(elPos);
+
+        // 3D空間上の直線距離を計算
+        const dist = camPos.distanceTo(elPos);
+
+        // 3m以内なら縮小、それ以上なら復元
+        if (dist < this.data.shrinkRadius && !this.isShrunk) {
+            this.el.emit('shrink');
+            this.isShrunk = true;
+        } else if (dist >= this.data.shrinkRadius && this.isShrunk) {
+            this.el.emit('grow');
+            this.isShrunk = false;
+        }
+    }
+});
+
 window.onload = () => {
     const scene = document.querySelector('a-scene');
     const debugPanel = document.getElementById('debug-panel');
@@ -12,9 +43,9 @@ window.onload = () => {
     let appStarted = false;
     let currentPos = { lat: 0, lng: 0 };
 
-    // --- 1. 2点間の距離を計算する関数 (単位: m) ---
+    // --- 1. 2点間の地理的距離を計算 (m単位) ---
     function getDistance(lat1, lng1, lat2, lng2) {
-        const R = 6371000; // 地球の半径
+        const R = 6371000;
         const dLat = (lat2 - lat1) * Math.PI / 180;
         const dLng = (lng2 - lng1) * Math.PI / 180;
         const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
@@ -30,22 +61,19 @@ window.onload = () => {
         currentPos.lng = pos.coords.longitude;
         const acc = Math.round(pos.coords.accuracy);
         
-        // 近くにある写真のカウント（半径20m以内）
         let nearbyCount = 0;
         const proximityRadius = 20; 
         const entities = document.querySelectorAll('[gps-entity-place]');
         
         entities.forEach(el => {
-            const lat = parseFloat(el.getAttribute('gps-entity-place').latitude);
-            const lng = parseFloat(el.getAttribute('gps-entity-place').longitude);
-            const dist = getDistance(currentPos.lat, currentPos.lng, lat, lng);
+            const attr = el.getAttribute('gps-entity-place');
+            const dist = getDistance(currentPos.lat, currentPos.lng, parseFloat(attr.latitude), parseFloat(attr.longitude));
             if (dist < proximityRadius) nearbyCount++;
         });
 
-        // デバッグパネルの表示内容
         let statusMsg = nearbyCount > 0 
-            ? `<span style="color: #ffeb3b; font-weight: bold;">📍 近くに ${nearbyCount} 枚の写真があります！</span>`
-            : `<span style="opacity: 0.6;">(近くに写真はありません)</span>`;
+            ? `<span style="color: #ffeb3b; font-weight: bold;">📍 近くに ${nearbyCount} 枚の写真！</span>`
+            : `<span style="opacity: 0.6;">(近くに写真なし)</span>`;
 
         debugPanel.innerHTML = `
             精度: ${acc}m<br>
@@ -54,14 +82,11 @@ window.onload = () => {
         `;
     }, err => console.error(err), { enableHighAccuracy: true });
 
-    // --- 3. IndexedDB (写真データの永続化) ---
+    // --- 3. IndexedDB ---
     let db;
     const dbRequest = indexedDB.open("GeoPhotoDB_V_Final", 1);
     dbRequest.onupgradeneeded = e => e.target.result.createObjectStore("photos", { keyPath: "id", autoIncrement: true });
-    dbRequest.onsuccess = e => { 
-        db = e.target.result; 
-        loadSavedPhotos(); 
-    };
+    dbRequest.onsuccess = e => { db = e.target.result; loadSavedPhotos(); };
 
     // --- 4. スタート処理 ---
     startScreen.addEventListener('click', () => {
@@ -70,7 +95,7 @@ window.onload = () => {
         appStarted = true;
     });
 
-    // --- 5. 写真の選択・リサイズ処理 ---
+    // --- 5. 写真選択 & リサイズ ---
     fileInput.addEventListener('change', e => {
         const file = e.target.files[0];
         if (!file) return;
@@ -95,16 +120,16 @@ window.onload = () => {
         reader.readAsDataURL(file);
     });
 
-    // --- 6. AR写真の生成 ---
+    // --- 6. AR写真の生成 (アニメーション & 近接制御付き) ---
     function createARPhoto(data) {
         const entity = document.createElement('a-entity');
         entity.setAttribute('gps-entity-place', `latitude: ${data.lat}; longitude: ${data.lng};`);
 
         const plane = document.createElement('a-plane');
         plane.setAttribute('look-at', '#myCamera');
-        plane.setAttribute('position', '0 1.5 0'); // 地面から1.5m
+        plane.setAttribute('position', '0 1.5 0'); 
         
-        const size = 2.5; // サイズを以前の半分に調整
+        const size = 2.5; 
         if (data.aspect >= 1) {
             plane.setAttribute('width', size);
             plane.setAttribute('height', size / data.aspect);
@@ -112,16 +137,25 @@ window.onload = () => {
             plane.setAttribute('height', size);
             plane.setAttribute('width', size * data.aspect);
         }
-        
         plane.setAttribute('material', 'shader: flat; side: double; transparent: true;');
 
-        // A-Frame 1.5.0 真っ白対策のテクスチャ流し込み
         const loader = new THREE.TextureLoader();
         loader.load(data.image, (texture) => {
             const mesh = plane.getObject3D('mesh');
             mesh.material.map = texture;
             mesh.material.needsUpdate = true;
         });
+
+        // アニメーション設定 (縮小・復元)
+        entity.setAttribute('animation__shrink', {
+            property: 'scale', to: '0.3 0.3 0.3', dur: 300, easing: 'easeOutQuad', startEvents: 'shrink'
+        });
+        entity.setAttribute('animation__grow', {
+            property: 'scale', to: '1 1 1', dur: 300, easing: 'easeOutQuad', startEvents: 'grow'
+        });
+
+        // 距離監視コンポーネント有効化
+        entity.setAttribute('proximity-listener', { shrinkRadius: 3 });
 
         entity.appendChild(plane);
         scene.appendChild(entity);
@@ -131,27 +165,16 @@ window.onload = () => {
         const tx = db.transaction(["photos"], "readonly");
         tx.objectStore("photos").openCursor().onsuccess = e => {
             const cursor = e.target.result;
-            if (cursor) { 
-                createARPhoto(cursor.value); 
-                cursor.continue(); 
-            }
+            if (cursor) { createARPhoto(cursor.value); cursor.continue(); }
         };
     }
 
-    // --- 7. タップで配置 ---
+    // --- 7. タップ配置 ---
     const handleTap = (e) => {
         if (!appStarted || e.target.closest('.ui-container') || !selectedImgUrl) return;
-        
-        const data = { 
-            lat: currentPos.lat, 
-            lng: currentPos.lng, 
-            image: selectedImgUrl, 
-            aspect: selectedAspect 
-        };
-        
+        const data = { lat: currentPos.lat, lng: currentPos.lng, image: selectedImgUrl, aspect: selectedAspect };
         db.transaction(["photos"], "readwrite").objectStore("photos").add(data);
         createARPhoto(data);
-        
         selectedImgUrl = null;
         fileLabel.innerText = "① 写真を選ぶ";
     };
@@ -159,7 +182,7 @@ window.onload = () => {
     window.addEventListener('touchstart', handleTap);
     window.addEventListener('mousedown', handleTap);
 
-    // --- 8. 高精度保存ロジック (比率補正あり) ---
+    // --- 8. 高精度保存 (比率補正) ---
     shotBtn.addEventListener('click', async () => {
         try {
             const video = document.querySelector('video');
@@ -174,7 +197,6 @@ window.onload = () => {
             const vAspect = video.videoWidth / video.videoHeight;
             const sAspect = canvas.width / canvas.height;
 
-            // 背景描画
             let sx, sy, sw, sh;
             if (vAspect > sAspect) {
                 sw = video.videoHeight * sAspect; sh = video.videoHeight;
@@ -185,11 +207,8 @@ window.onload = () => {
             }
             ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
-            // ARレイヤー描画（歪み補正）
             scene.renderer.render(scene.object3D, scene.camera);
-            const cw = glCanvas.width;
-            const ch = glCanvas.height;
-            const cAspect = cw / ch;
+            const cw = glCanvas.width, ch = glCanvas.height, cAspect = cw / ch;
 
             let asx, asy, asw, ash;
             if (cAspect > sAspect) {
@@ -201,11 +220,9 @@ window.onload = () => {
             }
             ctx.drawImage(glCanvas, asx, asy, asw, ash, 0, 0, canvas.width, canvas.height);
 
-            // フラッシュ演出 & 共有
             flashEffect();
             const url = canvas.toDataURL('image/jpeg', 0.8);
             saveOrShare(url);
-
         } catch (e) { console.error(e); }
     });
 
@@ -214,8 +231,7 @@ window.onload = () => {
         f.style.cssText = 'position:fixed;inset:0;background:white;z-index:99999;pointer-events:none;';
         document.body.appendChild(f);
         setTimeout(() => {
-            f.style.transition = 'opacity .4s';
-            f.style.opacity = 0;
+            f.style.transition = 'opacity .4s'; f.style.opacity = 0;
             setTimeout(() => f.remove(), 400);
         }, 50);
     }
@@ -223,18 +239,15 @@ window.onload = () => {
     async function saveOrShare(url) {
         const blob = await (await fetch(url)).blob();
         const file = new File([blob], `ar-${Date.now()}.jpg`, { type: 'image/jpeg' });
-        
         if (navigator.share) {
             try { await navigator.share({ files: [file] }); } catch (e) {}
         } else {
-            const a = document.createElement('a');
-            a.href = url; a.download = file.name; a.click();
+            const a = document.createElement('a'); a.href = url; a.download = file.name; a.click();
         }
     }
 
-    // --- 9. 全消去 ---
     document.getElementById('clearBtn').onclick = () => {
-        if (confirm("全ての写真を削除しますか？")) {
+        if (confirm("全消去しますか？")) {
             db.transaction(["photos"], "readwrite").objectStore("photos").clear();
             location.reload();
         }
