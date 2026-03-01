@@ -12,19 +12,19 @@ window.onload = () => {
     let appStarted = false;
     let currentPos = { lat: 0, lng: 0 };
 
-    // --- 1. リアルタイムGPS監視 (デバッグ用) ---
+    // 1. 常にGPSを監視してデバッグ表示を更新
     navigator.geolocation.watchPosition(pos => {
         currentPos.lat = pos.coords.latitude;
         currentPos.lng = pos.coords.longitude;
         const accuracy = pos.coords.accuracy;
-        debugPanel.innerHTML = `緯度: ${currentPos.lat.toFixed(6)}<br>経度: ${currentPos.lng.toFixed(6)}<br>精度: 約${Math.round(accuracy)}m<br>保存済み数: <span id="photo-count">${photoCountEl.innerText}</span>`;
+        debugPanel.innerHTML = `緯度: ${currentPos.lat.toFixed(6)}<br>経度: ${currentPos.lng.toFixed(6)}<br>精度: 約${Math.round(accuracy)}m<br>表示中: <span id="photo-count">${photoCountEl.innerText}</span>枚`;
     }, err => {
-        debugPanel.innerText = "GPSエラー: 許可されているか確認してください";
+        debugPanel.innerHTML = "<span style='color:red;'>GPSエラー: 許可を確認してください</span>";
     }, { enableHighAccuracy: true });
 
-    // --- 2. IndexedDB 設定 ---
+    // 2. データベース接続
     let db;
-    const dbRequest = indexedDB.open("GeoPhotoDB_V3", 1);
+    const dbRequest = indexedDB.open("GeoPhotoDB_V4", 1);
     dbRequest.onupgradeneeded = e => {
         e.target.result.createObjectStore("photos", { keyPath: "id", autoIncrement: true });
     };
@@ -52,16 +52,16 @@ window.onload = () => {
             const img = new Image();
             img.onload = () => {
                 const c = document.createElement('canvas');
-                const max = 800;
+                const max = 1024;
                 let w = img.width, h = img.height;
                 if (w > h && w > max) { h *= max / w; w = max; }
                 else if (h > max) { w *= max / h; h = max; }
                 c.width = w; c.height = h;
                 const ctx = c.getContext('2d');
                 ctx.drawImage(img, 0, 0, w, h);
-                selectedImgUrl = c.toDataURL('image/jpeg', 0.7);
+                selectedImgUrl = c.toDataURL('image/jpeg', 0.8);
                 selectedAspect = w / h;
-                fileLabel.innerText = "✅ タップで設置！";
+                fileLabel.innerText = "✅ 周りを見回してタップ！";
                 fileLabel.style.background = "#2e7d32";
             };
             img.src = ev.target.result;
@@ -69,7 +69,7 @@ window.onload = () => {
         reader.readAsDataURL(file);
     });
 
-    // --- 3. 写真生成 (setAttribute版) ---
+    // 3. 写真生成（巨大化 & 高度アップ版）
     function createARPhoto(data) {
         const entity = document.createElement('a-entity');
         entity.setAttribute('gps-entity-place', `latitude: ${data.lat}; longitude: ${data.lng};`);
@@ -77,7 +77,9 @@ window.onload = () => {
         const plane = document.createElement('a-plane');
         plane.setAttribute('look-at', '#myCamera');
         
-        // A-Frame標準の書き方に変更
+        // 地面に埋まらないように2m浮かせる
+        plane.setAttribute('position', '0 2 0');
+
         plane.setAttribute('material', {
             src: data.image,
             shader: 'flat',
@@ -85,7 +87,8 @@ window.onload = () => {
             side: 'double'
         });
 
-        const size = 3; 
+        // 見つけやすいように10メートルの巨大看板サイズに設定
+        const size = 10; 
         if (data.aspect >= 1) {
             plane.setAttribute('width', size);
             plane.setAttribute('height', size / data.aspect);
@@ -97,9 +100,8 @@ window.onload = () => {
         entity.appendChild(plane);
         scene.appendChild(entity);
         
-        // カウント更新
-        const currentCount = parseInt(photoCountEl.innerText);
-        photoCountEl.innerText = currentCount + 1;
+        // カウントをUIに反映
+        photoCountEl.innerText = document.querySelectorAll('a-plane').length;
     }
 
     function loadSavedPhotos() {
@@ -115,9 +117,9 @@ window.onload = () => {
 
     // タップ設置
     const handleTap = (e) => {
+        // UI操作時は反応させない
         if (!appStarted || e.target.closest('.ui-container') || !selectedImgUrl) return;
 
-        // 保存用データ
         const data = {
             lat: currentPos.lat,
             lng: currentPos.lng,
@@ -125,14 +127,10 @@ window.onload = () => {
             aspect: selectedAspect
         };
 
-        // DB保存
         const tx = db.transaction(["photos"], "readwrite");
         tx.objectStore("photos").add(data);
-        
-        // 即時描画
         createARPhoto(data);
 
-        // リセット
         selectedImgUrl = null;
         fileLabel.innerText = "① 写真を選ぶ";
         fileLabel.style.background = "rgba(0,0,0,.7)";
@@ -142,7 +140,7 @@ window.onload = () => {
     window.addEventListener('mousedown', handleTap);
 
     document.getElementById('clearBtn').onclick = () => {
-        if (confirm("全消去しますか？")) {
+        if (confirm("保存した写真をすべて削除しますか？")) {
             db.transaction(["photos"], "readwrite").objectStore("photos").clear();
             location.reload();
         }
