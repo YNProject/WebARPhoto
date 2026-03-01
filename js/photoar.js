@@ -12,14 +12,17 @@ window.onload = () => {
     let appStarted = false;
     let currentPos = { lat: 0, lng: 0 };
 
-    // 1. GPS監視（デバッグ表示用）
+    // 1. GPS監視（デバッグパネルに即反映）
     navigator.geolocation.watchPosition(pos => {
         currentPos.lat = pos.coords.latitude;
         currentPos.lng = pos.coords.longitude;
-        debugPanel.innerHTML = `緯度:${currentPos.lat.toFixed(5)} 経度:${currentPos.lng.toFixed(5)}<br>枚数: <span id="photo-count">${photoCountEl.innerText}</span>枚`;
+        const acc = Math.round(pos.coords.accuracy);
+        
+        // パネル表示の更新
+        debugPanel.innerHTML = `精度: ${acc}m<br>座標: ${currentPos.lat.toFixed(5)}, ${currentPos.lng.toFixed(5)}<br>枚数: <span id="photo-count">${document.querySelectorAll('a-plane').length}</span>枚`;
     }, null, { enableHighAccuracy: true });
 
-    // 2. DB
+    // 2. DB初期化
     let db;
     const dbRequest = indexedDB.open("GeoPhotoDB_V_Final", 1);
     dbRequest.onupgradeneeded = e => e.target.result.createObjectStore("photos", { keyPath: "id", autoIncrement: true });
@@ -47,6 +50,7 @@ window.onload = () => {
                 selectedImgUrl = c.toDataURL('image/jpeg', 0.8);
                 selectedAspect = w / h;
                 fileLabel.innerText = "✅ 好きな場所でタップ！";
+                fileLabel.style.background = "#2e7d32";
             };
             img.src = ev.target.result;
         };
@@ -60,17 +64,14 @@ window.onload = () => {
 
         const plane = document.createElement('a-plane');
         plane.setAttribute('look-at', '#myCamera');
-        plane.setAttribute('position', '0 2 0'); // 2m浮かせる
+        plane.setAttribute('position', '0 2 0'); 
         
-        // 5mの巨大サイズ
         const size = 5; 
         plane.setAttribute('width', data.aspect >= 1 ? size : size * data.aspect);
         plane.setAttribute('height', data.aspect >= 1 ? size / data.aspect : size);
+        plane.setAttribute('material', 'shader: flat; side: double; transparent: true;');
 
-        // A-Frame 1.5.0で最も安定するマテリアル設定
-        plane.setAttribute('material', 'shader: flat; side: double; transparent: true; opacity: 1;');
-
-        // 画像の流し込み（真っ白対策）
+        // 成功した「TextureLoader」流し込み法
         const loader = new THREE.TextureLoader();
         loader.load(data.image, (texture) => {
             const mesh = plane.getObject3D('mesh');
@@ -80,9 +81,6 @@ window.onload = () => {
 
         entity.appendChild(plane);
         scene.appendChild(entity);
-        
-        const count = document.querySelectorAll('a-plane').length;
-        photoCountEl.innerText = count;
     }
 
     function loadSavedPhotos() {
@@ -93,12 +91,8 @@ window.onload = () => {
         };
     }
 
-    // タップで配置
     const handleTap = (e) => {
         if (!appStarted || e.target.closest('.ui-container') || !selectedImgUrl) return;
-
-        // 【デバッグ用】タップした瞬間の座標を確認
-        console.log("タップ設置:", currentPos.lat, currentPos.lng);
 
         const data = { lat: currentPos.lat, lng: currentPos.lng, image: selectedImgUrl, aspect: selectedAspect };
         db.transaction(["photos"], "readwrite").objectStore("photos").add(data);
@@ -106,13 +100,14 @@ window.onload = () => {
 
         selectedImgUrl = null;
         fileLabel.innerText = "① 写真を選ぶ";
+        fileLabel.style.background = "rgba(0,0,0,.7)";
     };
 
     window.addEventListener('touchstart', handleTap);
     window.addEventListener('mousedown', handleTap);
 
     document.getElementById('clearBtn').onclick = () => {
-        if (confirm("全消去しますか？")) {
+        if (confirm("全データを削除しますか？")) {
             db.transaction(["photos"], "readwrite").objectStore("photos").clear();
             location.reload();
         }
