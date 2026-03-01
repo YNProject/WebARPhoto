@@ -1,8 +1,25 @@
-/* 1. 全画面・黒帯対策（お送りいただいたコードを継承） */
 body {
     margin: 0;
     overflow: hidden;
     background-color: #000;
+    font-family: sans-serif;
+}
+
+/* デバッグパネル */
+#debug-panel {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    color: #0f0; /* デバッグらしく緑色 */
+    padding: 10px;
+    font-size: 11px;
+    z-index: 30000;
+    pointer-events: none;
+    line-height: 1.4;
+    border: 1px solid #0f0;
+    border-radius: 5px;
 }
 
 video, .a-canvas {
@@ -15,16 +32,9 @@ video, .a-canvas {
     margin: 0 !important;
 }
 
-video {
-    transform: scale(1.01);
-    z-index: 1 !important;
-}
+video { transform: scale(1.01); z-index: 1 !important; }
+.a-canvas { z-index: 2 !important; }
 
-.a-canvas {
-    z-index: 2 !important;
-}
-
-/* 2. スタート画面 */
 #start-screen {
     position: fixed;
     inset: 0;
@@ -36,10 +46,8 @@ video {
     justify-content: center;
     z-index: 20000;
     cursor: pointer;
-    transition: opacity 0.4s ease;
 }
 
-/* 3. UIコンテナ */
 .ui-container {
     position: fixed;
     bottom: 40px;
@@ -61,15 +69,7 @@ button, label {
     font-size: 14px;
     flex: 1;
     text-align: center;
-    cursor: pointer;
 }
 
-.btn-danger {
-    border-color: #ff4444;
-    color: #ff4444;
-    flex: 0.4;
-}
-
-.a-enter-vr, .a-enter-ar, .a-loader-title {
-    display: none !important;
-}
+.btn-danger { border-color: #ff4444; color: #ff4444; flex: 0.4; }
+.a-enter-vr, .a-enter-ar, .a-loader-title { display: none !important; }
