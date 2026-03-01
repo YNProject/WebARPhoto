@@ -1,17 +1,17 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>位置情報写真AR</title>
-    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
+    <title>位置固定写真AR</title>
+    <script src="https://aframe.io/releases/1.0.4/aframe.min.js"></script>
     <script src="https://unpkg.com/aframe-look-at-component@0.8.0/dist/aframe-look-at-component.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <link rel="stylesheet" href="css/style.css">
 </head>
-<body style="margin:0; overflow:hidden;">
+<body style="margin: 0; overflow: hidden;">
     <div id="start-screen">
-        <h1>写真AR (GPS版)</h1>
+        <h1>位置固定ARフォト</h1>
         <p>タップしてスタート</p>
     </div>
 
@@ -23,12 +23,11 @@
     </div>
 
     <a-scene
-        embedded
-        arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;"
-        renderer="preserveDrawingBuffer: true; alpha: true; antialias: true;"
-        vr-mode-ui="enabled: false">
-        
-        <a-camera id="myCamera" gps-camera rotation-reader></a-camera>
+      vr-mode-ui="enabled: false"
+      embedded
+      arjs="sourceType: webcam; debugUIEnabled: false;"
+    >
+      <a-camera id="myCamera" gps-camera="minDistance: 1; maxDistance: 1000;" rotation-reader> </a-camera>
     </a-scene>
 
     <script src="js/photoar.js"></script>

@@ -11,18 +11,17 @@ window.onload = () => {
     let selectedAspect = 1;
     let appStarted = false;
 
-    // --- IndexedDB: 写真データの保存用 ---
+    // --- IndexedDB: 写真データの保存 ---
     let db;
-    const dbRequest = indexedDB.open("GeoPhotoDB", 1);
+    const dbRequest = indexedDB.open("GeoPhotoDB_V2", 1);
     dbRequest.onupgradeneeded = e => {
         e.target.result.createObjectStore("photos", { keyPath: "id", autoIncrement: true });
     };
     dbRequest.onsuccess = e => {
         db = e.target.result;
-        loadSavedPhotos(); // 起動時に過去の写真を復元
+        loadSavedPhotos(); 
     };
 
-    // スタート
     startScreen.addEventListener('click', () => {
         startScreen.style.opacity = '0';
         setTimeout(() => {
@@ -32,7 +31,7 @@ window.onload = () => {
         }, 400);
     });
 
-    // 写真選択
+    // 写真の圧縮と読み込み
     fileInput.addEventListener('change', e => {
         const file = e.target.files[0];
         if (!file) return;
@@ -41,16 +40,16 @@ window.onload = () => {
             const img = new Image();
             img.onload = () => {
                 const c = document.createElement('canvas');
-                const max = 1024;
+                const max = 800; // iOSのメモリ制限対策で少し小さめに設定
                 let w = img.width, h = img.height;
                 if (w > h && w > max) { h *= max / w; w = max; }
                 else if (h > max) { w *= max / h; h = max; }
                 c.width = w; c.height = h;
                 const ctx = c.getContext('2d');
                 ctx.drawImage(img, 0, 0, w, h);
-                selectedImgUrl = c.toDataURL('image/jpeg', 0.8);
+                selectedImgUrl = c.toDataURL('image/jpeg', 0.7);
                 selectedAspect = w / h;
-                fileLabel.innerText = "✅ 画面をタップ！";
+                fileLabel.innerText = "✅ 設置する場所でタップ！";
                 fileLabel.style.background = "#2e7d32";
             };
             img.src = ev.target.result;
@@ -58,16 +57,26 @@ window.onload = () => {
         reader.readAsDataURL(file);
     });
 
-    // 写真をAR空間に生成
+    // --- AR写真生成ロジック ---
     function createARPhoto(data) {
-        const plane = document.createElement('a-plane');
-        // GPS位置を指定
-        plane.setAttribute('gps-entity-place', `latitude: ${data.lat}; longitude: ${data.lng};`);
-        plane.setAttribute('look-at', '#myCamera');
-        plane.setAttribute('material', 'shader:flat;side:double;transparent:true');
+        const entity = document.createElement('a-entity');
         
-        // サイズ設定
-        const size = 3; // GPS空間で見えやすいよう少し大きめ
+        // GPS位置の設定
+        entity.setAttribute('gps-entity-place', `latitude: ${data.lat}; longitude: ${data.lng};`);
+        
+        // 白飛び防止: shader: flat を指定
+        const plane = document.createElement('a-plane');
+        plane.setAttribute('look-at', '#myCamera');
+        plane.setAttribute('material', 'shader: flat; side: double; transparent: true;');
+        plane.setAttribute('visible', 'false'); // 読み込み完了まで隠す
+
+        // 距離を監視
+        entity.addEventListener('gps-entity-place-update-positon', (event) => {
+            // 必要に応じて「30m以内なら大きくする」などの演出を入れる
+            console.log(`写真までの距離: ${event.detail.distance}m`);
+        });
+
+        const size = 1; // GPSベースだと1m=1単位なので少し大きめにする
         if (data.aspect >= 1) {
             plane.setAttribute('width', size);
             plane.setAttribute('height', size / data.aspect);
@@ -76,18 +85,21 @@ window.onload = () => {
             plane.setAttribute('width', size * data.aspect);
         }
 
-        new THREE.TextureLoader().load(data.image, tex => {
+        const loader = new THREE.TextureLoader();
+        loader.load(data.image, (tex) => {
             const mesh = plane.getObject3D('mesh');
             mesh.material.map = tex;
             mesh.material.needsUpdate = true;
+            plane.setAttribute('visible', 'true');
         });
-        scene.appendChild(plane);
+
+        entity.appendChild(plane);
+        scene.appendChild(entity);
     }
 
-    // 保存データの復元
     function loadSavedPhotos() {
-        const transaction = db.transaction(["photos"], "readonly");
-        transaction.objectStore("photos").openCursor().onsuccess = e => {
+        const tx = db.transaction(["photos"], "readonly");
+        tx.objectStore("photos").openCursor().onsuccess = e => {
             const cursor = e.target.result;
             if (cursor) {
                 createARPhoto(cursor.value);
@@ -96,8 +108,8 @@ window.onload = () => {
         };
     }
 
-    // タップで位置取得＆保存
-    async function addPhoto(e) {
+    // タップで設置
+    async function handleTap(e) {
         if (!appStarted || e.target.closest('.ui-container') || !selectedImgUrl) return;
 
         navigator.geolocation.getCurrentPosition(pos => {
@@ -108,60 +120,23 @@ window.onload = () => {
                 aspect: selectedAspect
             };
             
-            // 保存
-            const tx = db.transaction(["photos"], "readwrite");
-            tx.objectStore("photos").add(data);
-            
-            // 配置
+            db.transaction(["photos"], "readwrite").objectStore("photos").add(data);
             createARPhoto(data);
 
             selectedImgUrl = null;
             fileLabel.innerText = "① 写真を選ぶ";
             fileLabel.style.background = "rgba(0,0,0,.7)";
-        }, err => alert("GPSをオンにしてください"), { enableHighAccuracy: true });
+        }, err => alert("GPSをオンにして屋外で試してください"), { enableHighAccuracy: true });
     }
 
-    window.addEventListener('touchstart', addPhoto);
-    window.addEventListener('mousedown', addPhoto);
+    window.addEventListener('touchstart', handleTap);
+    window.addEventListener('mousedown', handleTap);
 
-    // 全消去
+    // データ全消去
     clearBtn.onclick = () => {
         if (confirm("全データを削除しますか？")) {
             db.transaction(["photos"], "readwrite").objectStore("photos").clear();
             location.reload();
         }
     };
-
-    // スクリーンショット保存（お送りいただいたコードを流用）
-    shotBtn.addEventListener('click', async () => {
-        try {
-            const video = document.querySelector('video');
-            const glCanvas = scene.canvas;
-            const canvas = document.createElement('canvas');
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            const ctx = canvas.getContext('2d');
-
-            // 背景（カメラ）
-            const vAspect = video.videoWidth / video.videoHeight;
-            const sAspect = canvas.width / canvas.height;
-            let sx, sy, sw, sh;
-            if (vAspect > sAspect) {
-                sw = video.videoHeight * sAspect; sh = video.videoHeight;
-                sx = (video.videoWidth - sw) / 2; sy = 0;
-            } else {
-                sw = video.videoWidth; sh = video.videoWidth / sAspect;
-                sx = 0; sy = (video.videoHeight - sh) / 2;
-            }
-            ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-
-            // ARレイヤー
-            scene.renderer.render(scene.object3D, scene.camera);
-            ctx.drawImage(glCanvas, 0, 0, glCanvas.width, glCanvas.height, 0, 0, canvas.width, canvas.height);
-
-            const url = canvas.toDataURL('image/jpeg', 0.8);
-            const link = document.createElement('a');
-            link.href = url; link.download = `ar-${Date.now()}.jpg`; link.click();
-        } catch (e) { console.error(e); }
-    });
 };
