@@ -6,6 +6,7 @@ window.onload = () => {
     const fileLabel = document.getElementById('fileLabel');
     const startScreen = document.getElementById('start-screen');
     const mainUI = document.getElementById('main-ui');
+    const shotBtn = document.getElementById('shotBtn'); // 取得
 
     let selectedImgUrl = null;
     let selectedAspect = 1;
@@ -60,9 +61,10 @@ window.onload = () => {
 
         const plane = document.createElement('a-plane');
         plane.setAttribute('look-at', '#myCamera');
-        plane.setAttribute('position', '0 2 0'); 
+        plane.setAttribute('position', '0 1.5 0'); // 高さを少し下げて1.5mに
         
-        const size = 5; 
+        // サイズを半分（2.5m）に変更
+        const size = 2.5; 
         plane.setAttribute('width', data.aspect >= 1 ? size : size * data.aspect);
         plane.setAttribute('height', data.aspect >= 1 ? size / data.aspect : size);
         plane.setAttribute('material', 'shader: flat; side: double; transparent: true;');
@@ -97,6 +99,34 @@ window.onload = () => {
 
     window.addEventListener('touchstart', handleTap);
     window.addEventListener('mousedown', handleTap);
+
+    // --- スクリーンショット機能の復活 ---
+    shotBtn.addEventListener('click', () => {
+        try {
+            const video = document.querySelector('video');
+            const glCanvas = scene.canvas;
+            const canvas = document.createElement('canvas');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            const ctx = canvas.getContext('2d');
+
+            // 1. カメラ映像を描画
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // 2. ARレイヤーを描画
+            scene.renderer.render(scene.object3D, scene.camera);
+            ctx.drawImage(glCanvas, 0, 0, canvas.width, canvas.height);
+
+            // 3. ダウンロード
+            const link = document.createElement('a');
+            link.href = canvas.toDataURL('image/jpeg', 0.9);
+            link.download = `ar-shot-${Date.now()}.jpg`;
+            link.click();
+        } catch (err) {
+            console.error(err);
+            alert("保存に失敗しました。カメラの許可設定を確認してください。");
+        }
+    });
 
     document.getElementById('clearBtn').onclick = () => {
         if (confirm("全消去しますか？")) {
