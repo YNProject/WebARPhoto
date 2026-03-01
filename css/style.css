@@ -5,7 +5,6 @@ body {
     font-family: sans-serif;
 }
 
-/* デバッグパネルの設定（共有デザインベース） */
 #debug-panel {
     position: fixed;
     top: 10px;
@@ -23,7 +22,6 @@ body {
     font-family: monospace;
 }
 
-/* カメラ映像とARレイヤーを全画面に（黒い線対策） */
 video, .a-canvas {
     width: 100vw !important;
     height: 100vh !important;
@@ -34,11 +32,9 @@ video, .a-canvas {
     margin: 0 !important;
 }
 
-/* 1.02倍スケールで端の隙間を完全に隠す */
 video { transform: scale(1.02); z-index: 1 !important; }
 .a-canvas { z-index: 2 !important; }
 
-/* スタート画面 */
 #start-screen {
     position: fixed;
     inset: 0;
@@ -50,10 +46,8 @@ video { transform: scale(1.02); z-index: 1 !important; }
     justify-content: center;
     z-index: 20000;
     cursor: pointer;
-    text-align: center;
 }
 
-/* UIボタンコンテナ */
 .ui-container {
     position: fixed;
     bottom: 40px;
@@ -66,14 +60,13 @@ video { transform: scale(1.02); z-index: 1 !important; }
     max-width: 400px;
 }
 
-/* 共有デザインの透過ぼかしボタン */
 button, label {
     padding: 18px 10px;
     background: rgba(255, 255, 255, 0.15);
     color: white;
     border-radius: 50px;
     border: 2px solid #fff;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: bold;
     flex: 1;
     text-align: center;
@@ -81,9 +74,6 @@ button, label {
     cursor: pointer;
 }
 
-.btn-danger { border-color: #ff4444; color: #ff4444; }
+.btn-danger { border-color: #ff4444; color: #ff4444; flex: 0.5; }
 
-/* VRボタン・ロード画面を強制非表示 */
-.a-enter-vr, .a-enter-ar, .a-loader-title, .a-enter-vr-button { 
-    display: none !important; 
-}
+.a-enter-vr, .a-enter-ar, .a-loader-title { display: none !important; }

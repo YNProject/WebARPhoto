@@ -6,7 +6,7 @@ window.onload = () => {
     const fileLabel = document.getElementById('fileLabel');
     const startScreen = document.getElementById('start-screen');
     const mainUI = document.getElementById('main-ui');
-    const shotBtn = document.getElementById('shotBtn'); // 取得
+    const shotBtn = document.getElementById('shotBtn');
 
     let selectedImgUrl = null;
     let selectedAspect = 1;
@@ -46,9 +46,9 @@ window.onload = () => {
                 c.width = w; c.height = h;
                 const ctx = c.getContext('2d');
                 ctx.drawImage(img, 0, 0, w, h);
-                selectedImgUrl = c.toDataURL('image/jpeg', 0.8);
+                selectedImgUrl = c.toDataURL('image/jpeg', 0.9);
                 selectedAspect = w / h;
-                fileLabel.innerText = "✅ 好きな場所でタップ！";
+                fileLabel.innerText = "✅ 画面をタップ！";
             };
             img.src = ev.target.result;
         };
@@ -61,10 +61,9 @@ window.onload = () => {
 
         const plane = document.createElement('a-plane');
         plane.setAttribute('look-at', '#myCamera');
-        plane.setAttribute('position', '0 1.5 0'); // 高さを少し下げて1.5mに
+        plane.setAttribute('position', '0 1.5 0'); 
         
-        // サイズを半分（2.5m）に変更
-        const size = 2.5; 
+        const size = 2.5; // 半分サイズ
         plane.setAttribute('width', data.aspect >= 1 ? size : size * data.aspect);
         plane.setAttribute('height', data.aspect >= 1 ? size / data.aspect : size);
         plane.setAttribute('material', 'shader: flat; side: double; transparent: true;');
@@ -100,33 +99,78 @@ window.onload = () => {
     window.addEventListener('touchstart', handleTap);
     window.addEventListener('mousedown', handleTap);
 
-    // --- スクリーンショット機能の復活 ---
-    shotBtn.addEventListener('click', () => {
+    // --- 高精度保存ロジック ---
+    shotBtn.addEventListener('click', async () => {
         try {
             const video = document.querySelector('video');
             const glCanvas = scene.canvas;
+            if (!video || !glCanvas) return;
+
             const canvas = document.createElement('canvas');
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
             const ctx = canvas.getContext('2d');
 
-            // 1. カメラ映像を描画
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const vAspect = video.videoWidth / video.videoHeight;
+            const sAspect = canvas.width / canvas.height;
 
-            // 2. ARレイヤーを描画
+            // 1. ビデオ背景の切り抜き描画
+            let sx, sy, sw, sh;
+            if (vAspect > sAspect) {
+                sw = video.videoHeight * sAspect; sh = video.videoHeight;
+                sx = (video.videoWidth - sw) / 2; sy = 0;
+            } else {
+                sw = video.videoWidth; sh = video.videoWidth / sAspect;
+                sx = 0; sy = (video.videoHeight - sh) / 2;
+            }
+            ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+
+            // 2. ARレイヤーの切り抜き描画（歪み防止）
             scene.renderer.render(scene.object3D, scene.camera);
-            ctx.drawImage(glCanvas, 0, 0, canvas.width, canvas.height);
+            const cw = glCanvas.width;
+            const ch = glCanvas.height;
+            const cAspect = cw / ch;
 
-            // 3. ダウンロード
-            const link = document.createElement('a');
-            link.href = canvas.toDataURL('image/jpeg', 0.9);
-            link.download = `ar-shot-${Date.now()}.jpg`;
-            link.click();
-        } catch (err) {
-            console.error(err);
-            alert("保存に失敗しました。カメラの許可設定を確認してください。");
-        }
+            let asx, asy, asw, ash;
+            if (cAspect > sAspect) {
+                asw = ch * sAspect; ash = ch;
+                asx = (cw - asw) / 2; asy = 0;
+            } else {
+                asw = cw; ash = cw / sAspect;
+                asx = 0; asy = (ch - ash) / 2;
+            }
+            ctx.drawImage(glCanvas, asx, asy, asw, ash, 0, 0, canvas.width, canvas.height);
+
+            // 3. フラッシュ演出と共有/保存
+            const url = canvas.toDataURL('image/jpeg', 0.8);
+            flashEffect();
+            saveOrShare(url);
+
+        } catch (e) { console.error(e); }
     });
+
+    function flashEffect() {
+        const f = document.createElement('div');
+        f.style.cssText = 'position:fixed;inset:0;background:white;z-index:99999;pointer-events:none;';
+        document.body.appendChild(f);
+        setTimeout(() => {
+            f.style.transition = 'opacity .4s';
+            f.style.opacity = 0;
+            setTimeout(() => f.remove(), 400);
+        }, 50);
+    }
+
+    async function saveOrShare(url) {
+        const blob = await (await fetch(url)).blob();
+        const file = new File([blob], `ar-${Date.now()}.jpg`, { type: 'image/jpeg' });
+        
+        if (navigator.share) {
+            try { await navigator.share({ files: [file] }); } catch (e) {}
+        } else {
+            const a = document.createElement('a');
+            a.href = url; a.download = file.name; a.click();
+        }
+    }
 
     document.getElementById('clearBtn').onclick = () => {
         if (confirm("全消去しますか？")) {
