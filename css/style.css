@@ -1,13 +1,10 @@
-/* 1. 基本設定：AR.jsの動作を優先しつつ余白を消す */
+/* 1. 全画面・黒帯対策（お送りいただいたコードを継承） */
 body {
     margin: 0;
     overflow: hidden;
     background-color: #000;
-    font-family: sans-serif;
 }
 
-/* 2. ビデオ映像とARキャンバス：黒帯を消すための最終設定 */
-/* これがないと、スマホの機種によって上下に黒い隙間ができてしまいます */
 video, .a-canvas {
     width: 100vw !important;
     height: 100vh !important;
@@ -16,20 +13,18 @@ video, .a-canvas {
     top: 0 !important;
     left: 0 !important;
     margin: 0 !important;
-    image-rendering: auto; 
 }
 
-/* ビデオ要素だけ少し拡大して確実に隙間を殺す（保険） */
 video {
     transform: scale(1.01);
+    z-index: 1 !important;
 }
 
-/* 3. A-Frameの描画エリアをビデオより上に配置 */
 .a-canvas {
     z-index: 2 !important;
 }
 
-/* 4. スタート画面 */
+/* 2. スタート画面 */
 #start-screen {
     position: fixed;
     inset: 0;
@@ -43,10 +38,8 @@ video {
     cursor: pointer;
     transition: opacity 0.4s ease;
 }
-#start-screen h1 { font-size: 28px; margin-bottom: 15px; }
-#start-screen p { font-size: 16px; opacity: 0.8; }
 
-/* 5. UIコンテナ */
+/* 3. UIコンテナ */
 .ui-container {
     position: fixed;
     bottom: 40px;
@@ -59,7 +52,6 @@ video {
     max-width: 400px;
 }
 
-/* 6. ボタンとラベル（元のデザインを継承） */
 button, label {
     padding: 16px 10px;
     background: rgba(0, 0, 0, 0.7);
@@ -70,20 +62,14 @@ button, label {
     flex: 1;
     text-align: center;
     cursor: pointer;
-    font-weight: bold;
-    display: flex;
-    align-items: center;
-    justify-content: center;
 }
 
-/* 消去ボタンのみ赤色に */
 .btn-danger {
     border-color: #ff4444;
     color: #ff4444;
     flex: 0.4;
 }
 
-/* 7. A-Frame標準の不要なUIを隠す */
 .a-enter-vr, .a-enter-ar, .a-loader-title {
     display: none !important;
 }

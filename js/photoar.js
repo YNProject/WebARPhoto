@@ -11,19 +11,18 @@ window.onload = () => {
     let selectedAspect = 1;
     let appStarted = false;
 
-    // --- IndexedDB 初期化 ---
+    // --- IndexedDB: 写真データの保存用 ---
     let db;
-    const request = indexedDB.open("PhotoAR_DB", 1);
-    request.onupgradeneeded = (e) => {
-        db = e.target.result;
-        db.createObjectStore("photos", { keyPath: "id", autoIncrement: true });
+    const dbRequest = indexedDB.open("GeoPhotoDB", 1);
+    dbRequest.onupgradeneeded = e => {
+        e.target.result.createObjectStore("photos", { keyPath: "id", autoIncrement: true });
     };
-    request.onsuccess = (e) => {
+    dbRequest.onsuccess = e => {
         db = e.target.result;
-        loadSavedPhotos(); // 起動時に保存済みデータを表示
+        loadSavedPhotos(); // 起動時に過去の写真を復元
     };
 
-    // アプリ開始処理
+    // スタート
     startScreen.addEventListener('click', () => {
         startScreen.style.opacity = '0';
         setTimeout(() => {
@@ -33,7 +32,7 @@ window.onload = () => {
         }, 400);
     });
 
-    // --- 写真の読み込みとリサイズ ---
+    // 写真選択
     fileInput.addEventListener('change', e => {
         const file = e.target.files[0];
         if (!file) return;
@@ -49,11 +48,9 @@ window.onload = () => {
                 c.width = w; c.height = h;
                 const ctx = c.getContext('2d');
                 ctx.drawImage(img, 0, 0, w, h);
-                
                 selectedImgUrl = c.toDataURL('image/jpeg', 0.8);
                 selectedAspect = w / h;
-                
-                fileLabel.innerText = "✅ 設置する場所でタップ！";
+                fileLabel.innerText = "✅ 画面をタップ！";
                 fileLabel.style.background = "#2e7d32";
             };
             img.src = ev.target.result;
@@ -61,68 +58,36 @@ window.onload = () => {
         reader.readAsDataURL(file);
     });
 
-    // --- 設置 & 位置情報取得 & 保存 ---
-    async function handleTap(e) {
-        if (!appStarted || e.target.closest('.ui-container') || !selectedImgUrl) return;
-
-        // 現在の位置を取得（タップした瞬間に取得）
-        navigator.geolocation.getCurrentPosition((pos) => {
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-
-            const photoData = {
-                lat: lat,
-                lng: lng,
-                image: selectedImgUrl,
-                aspect: selectedAspect,
-                timestamp: Date.now()
-            };
-
-            // DBに保存
-            const transaction = db.transaction(["photos"], "readwrite");
-            transaction.objectStore("photos").add(photoData);
-
-            // AR空間に表示
-            createARPhoto(photoData);
-
-            // UIを元に戻す
-            selectedImgUrl = null;
-            fileLabel.innerText = "① 写真を選ぶ";
-            fileLabel.style.background = "rgba(0,0,0,.75)";
-        }, (err) => {
-            alert("位置情報が取得できませんでした。設定を確認してください。");
-        }, { enableHighAccuracy: true });
-    }
-
-    // AR要素を生成する関数
+    // 写真をAR空間に生成
     function createARPhoto(data) {
         const plane = document.createElement('a-plane');
+        // GPS位置を指定
         plane.setAttribute('gps-entity-place', `latitude: ${data.lat}; longitude: ${data.lng};`);
-        plane.setAttribute('look-at', '#myCamera'); 
-        plane.setAttribute('scale', '15 15 15'); 
-        plane.setAttribute('material', 'shader:flat; side:double; transparent:true');
+        plane.setAttribute('look-at', '#myCamera');
+        plane.setAttribute('material', 'shader:flat;side:double;transparent:true');
         
+        // サイズ設定
+        const size = 3; // GPS空間で見えやすいよう少し大きめ
+        if (data.aspect >= 1) {
+            plane.setAttribute('width', size);
+            plane.setAttribute('height', size / data.aspect);
+        } else {
+            plane.setAttribute('height', size);
+            plane.setAttribute('width', size * data.aspect);
+        }
+
         new THREE.TextureLoader().load(data.image, tex => {
             const mesh = plane.getObject3D('mesh');
             mesh.material.map = tex;
             mesh.material.needsUpdate = true;
-            const baseSize = 2;
-            if (data.aspect >= 1) {
-                plane.setAttribute('width', baseSize);
-                plane.setAttribute('height', baseSize / data.aspect);
-            } else {
-                plane.setAttribute('height', baseSize);
-                plane.setAttribute('width', baseSize * data.aspect);
-            }
         });
         scene.appendChild(plane);
     }
 
-    // 保存済みデータの読み込み
+    // 保存データの復元
     function loadSavedPhotos() {
         const transaction = db.transaction(["photos"], "readonly");
-        const store = transaction.objectStore("photos");
-        store.openCursor().onsuccess = (e) => {
+        transaction.objectStore("photos").openCursor().onsuccess = e => {
             const cursor = e.target.result;
             if (cursor) {
                 createARPhoto(cursor.value);
@@ -131,23 +96,72 @@ window.onload = () => {
         };
     }
 
-    // データ全消去
+    // タップで位置取得＆保存
+    async function addPhoto(e) {
+        if (!appStarted || e.target.closest('.ui-container') || !selectedImgUrl) return;
+
+        navigator.geolocation.getCurrentPosition(pos => {
+            const data = {
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+                image: selectedImgUrl,
+                aspect: selectedAspect
+            };
+            
+            // 保存
+            const tx = db.transaction(["photos"], "readwrite");
+            tx.objectStore("photos").add(data);
+            
+            // 配置
+            createARPhoto(data);
+
+            selectedImgUrl = null;
+            fileLabel.innerText = "① 写真を選ぶ";
+            fileLabel.style.background = "rgba(0,0,0,.7)";
+        }, err => alert("GPSをオンにしてください"), { enableHighAccuracy: true });
+    }
+
+    window.addEventListener('touchstart', addPhoto);
+    window.addEventListener('mousedown', addPhoto);
+
+    // 全消去
     clearBtn.onclick = () => {
-        if(confirm("保存したすべての写真を削除しますか？")) {
-            const transaction = db.transaction(["photos"], "readwrite");
-            transaction.objectStore("photos").clear();
+        if (confirm("全データを削除しますか？")) {
+            db.transaction(["photos"], "readwrite").objectStore("photos").clear();
             location.reload();
         }
     };
 
-    window.addEventListener('mousedown', handleTap);
-    window.addEventListener('touchstart', handleTap, { passive: false });
+    // スクリーンショット保存（お送りいただいたコードを流用）
+    shotBtn.addEventListener('click', async () => {
+        try {
+            const video = document.querySelector('video');
+            const glCanvas = scene.canvas;
+            const canvas = document.createElement('canvas');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            const ctx = canvas.getContext('2d');
 
-    // スクリーンショット保存（簡易版）
-    shotBtn.onclick = () => {
-        const canvas = scene.renderer.domElement;
-        const url = canvas.toDataURL('image/jpeg');
-        const a = document.createElement('a');
-        a.href = url; a.download = `ar-photo-${Date.now()}.jpg`; a.click();
-    };
+            // 背景（カメラ）
+            const vAspect = video.videoWidth / video.videoHeight;
+            const sAspect = canvas.width / canvas.height;
+            let sx, sy, sw, sh;
+            if (vAspect > sAspect) {
+                sw = video.videoHeight * sAspect; sh = video.videoHeight;
+                sx = (video.videoWidth - sw) / 2; sy = 0;
+            } else {
+                sw = video.videoWidth; sh = video.videoWidth / sAspect;
+                sx = 0; sy = (video.videoHeight - sh) / 2;
+            }
+            ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+
+            // ARレイヤー
+            scene.renderer.render(scene.object3D, scene.camera);
+            ctx.drawImage(glCanvas, 0, 0, glCanvas.width, glCanvas.height, 0, 0, canvas.width, canvas.height);
+
+            const url = canvas.toDataURL('image/jpeg', 0.8);
+            const link = document.createElement('a');
+            link.href = url; link.download = `ar-${Date.now()}.jpg`; link.click();
+        } catch (e) { console.error(e); }
+    });
 };
