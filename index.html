@@ -3,23 +3,23 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>位置固定ARフォト - 巨大デバッグ版</title>
-    <script src="https://aframe.io/releases/1.0.4/aframe.min.js"></script>
-    <script src="https://unpkg.com/aframe-look-at-component@0.8.0/dist/aframe-look-at-component.min.js"></script>
+    <title>位置固定ARフォト - A-Frame 1.5.0</title>
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+    <script src="https://unpkg.com/aframe-look-at-component@0.8.0/dist/aframe-look-at-component.min.js"></script>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body style="margin: 0; overflow: hidden;">
 
     <div id="debug-panel">
-        GPS情報: 取得中...<br>
-        表示中: <span id="photo-count">0</span>枚
+        GPS: 取得中...<br>
+        表示: <span id="photo-count">0</span>枚
+        <button id="force-show" style="margin-top:5px; background:#0f0; color:#000; border:none; padding:8px; font-weight:bold; border-radius:5px;">目の前に召喚</button>
     </div>
 
     <div id="start-screen">
         <h1>位置固定ARフォト</h1>
         <p>タップしてスタート</p>
-        <small>※屋外の広い場所で使ってください</small>
     </div>
 
     <div class="ui-container" id="main-ui">
@@ -31,9 +31,10 @@
     <a-scene
       vr-mode-ui="enabled: false"
       embedded
-      arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;"
+      arjs="sourceType: webcam; debugUIEnabled: false; videoTexture: true;"
+      renderer="antialias: true; alpha: true; logarithmicDepthBuffer: true;"
     >
-      <a-camera id="myCamera" gps-camera="minDistance: 0;" rotation-reader> </a-camera>
+      <a-camera id="myCamera" gps-camera="simulateLatitude: 0; simulateLongitude: 0;" rotation-reader> </a-camera>
     </a-scene>
 
     <script src="js/photoar.js"></script>
